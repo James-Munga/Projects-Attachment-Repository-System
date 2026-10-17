@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}Register{% endblock %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-md-7 col-lg-6"><div class="card shadow-sm"><div class="card-body p-4">
+<h1 class="h3 mb-3">Create staff account</h1><p class="text-muted">Verify your email, then wait for administrator approval.</p>
+<form method="post">{% csrf_token %}
+{% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field.as_widget|safe }}{% if field.errors %}<div class="text-danger small">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}
+<button class="btn btn-primary w-100">Register</button></form>
+</div></div></div></div>
+{% endblock %}

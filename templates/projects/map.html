@@ -1,0 +1,93 @@
+{% extends "base.html" %}{% block title %}Worldwide Project Map{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>#project-map{height:65vh;min-height:420px;border-radius:.5rem;border:1px solid #dee2e6}.stat-number{font-size:1.8rem;font-weight:700}</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h2 mb-1">Worldwide project map</h1><p class="text-muted mb-0">Click a marker to open project details.</p></div><a class="btn btn-primary" href="{% url 'project-create' %}">+ Add project</a></div>
+<div class="row g-3 mb-3">
+<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-muted">Accessible projects</div><div id="total-count" class="stat-number">—</div></div></div></div>
+<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-muted">Mapped projects</div><div id="mapped-count" class="stat-number">—</div></div></div></div>
+<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-muted">Without coordinates</div><div id="unmapped-count" class="stat-number">—</div></div></div></div>
+</div>
+<div class="row g-2 mb-3">
+<div class="col-md-4"><input id="map-search" class="form-control" placeholder="Search project name or code"></div>
+<div class="col-md-2"><select id="department-filter" class="form-select"><option value="">All departments</option></select></div>
+<div class="col-md-2"><select id="type-filter" class="form-select"><option value="">All project types</option></select></div>
+<div class="col-md-2"><select id="status-filter" class="form-select"><option value="">All statuses</option><option value="active">Active</option><option value="completed">Completed</option><option value="on_hold">On hold</option></select></div>
+<div class="col-md-2"><button id="reset-map" class="btn btn-outline-secondary w-100">Reset map</button></div>
+</div>
+<div id="project-map" role="application" aria-label="Worldwide map of authorized projects"></div>
+<p class="small text-muted mt-2">Map tiles © OpenStreetMap contributors. Project locations are visible only to users who have permission to view those projects.</p>
+{% endblock %}
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(() => {
+  const map = L.map('project-map').setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  let allProjects = [];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function loadStats() {
+    const r = await fetch("{% url 'project-map-stats' %}", {headers: {'X-Requested-With':'XMLHttpRequest'}});
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('total-count').textContent = d.total;
+    document.getElementById('mapped-count').textContent = d.mapped;
+    document.getElementById('unmapped-count').textContent = d.unmapped;
+  }
+  function renderMarkers() {
+    layer.clearLayers();
+    const q = document.getElementById('map-search').value.toLowerCase().trim();
+    const status = document.getElementById('status-filter').value;
+    const department = document.getElementById('department-filter').value;
+    const type = document.getElementById('type-filter').value;
+    const visible = allProjects.filter(p => {
+      const hay = `${p.title} ${p.code} ${p.department || ''} ${p.project_type || ''}`.toLowerCase();
+      return (!q || hay.includes(q)) && (!status || p.status === status)
+        && (!department || p.department === department)
+        && (!type || p.project_type === type);
+    });
+    visible.forEach(p => {
+      const marker = L.marker([p.latitude, p.longitude]);
+      marker.bindPopup(`<div><strong>${esc(p.title)}</strong><br><span>${esc(p.code)}</span><br><span>${esc(p.department || 'No department')}</span><br><span>Status: ${esc(p.status)}</span><br><a href="${esc(p.url)}">Open project</a></div>`);
+      marker.addTo(layer);
+    });
+  }
+  async function loadProjects() {
+    const r = await fetch("{% url 'project-map-data' %}", {headers: {'X-Requested-With':'XMLHttpRequest'}});
+    if (!r.ok) return;
+    const d = await r.json();
+    allProjects = d.projects;
+    const fillOptions = (id, values, firstLabel) => {
+      const select = document.getElementById(id);
+      [...new Set(values.filter(Boolean))].sort().forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+    };
+    fillOptions('department-filter', allProjects.map(p => p.department), 'All departments');
+    fillOptions('type-filter', allProjects.map(p => p.project_type), 'All project types');
+    renderMarkers();
+  }
+  document.getElementById('map-search').addEventListener('input', renderMarkers);
+  document.getElementById('status-filter').addEventListener('change', renderMarkers);
+  document.getElementById('department-filter').addEventListener('change', renderMarkers);
+  document.getElementById('type-filter').addEventListener('change', renderMarkers);
+  document.getElementById('reset-map').addEventListener('click', () => {
+    document.getElementById('map-search').value = '';
+    document.getElementById('status-filter').value = '';
+    document.getElementById('department-filter').value = '';
+    document.getElementById('type-filter').value = '';
+    map.setView([20, 0], 2);
+    renderMarkers();
+  });
+  loadStats(); loadProjects();
+})();
+</script>
+{% endblock %}
